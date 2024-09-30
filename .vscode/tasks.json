@@ -1,0 +1,33 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "package",
+      "label": "npm: package",
+      "detail": "ncc build src/main.js -o dist --source-map --license licenses.txt",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [
+        "$tsc",
+        "$eslint-compact"
+      ],
+      "icon": {
+        "id": "tools",
+        "color": "terminal.ansiRed"
+      }
+    },
+    {
+      "type": "npm",
+      "script": "run",
+      "problemMatcher": [
+        "$tsc-watch"
+      ],
+      "label": "npm: run",
+      "detail": "node --env-file=.env dist/index.js",
+      "isBackground": true
+    }
+  ],
+}

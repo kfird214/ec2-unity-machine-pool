@@ -1,0 +1,8 @@
+{
+    "recommendations": [
+        "dbaeumer.vscode-eslint",
+        "christian-kohler.npm-intellisense",
+        "github.vscode-github-actions",
+        "visualstudioexptteam.vscodeintellicode"
+    ]
+}

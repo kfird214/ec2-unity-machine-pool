@@ -1,0 +1,34 @@
+name: 'ec2 unity machine pool'
+description: 'This is a GitHub Action that creates a machine pool of EC2 instances for Unity builds.'
+author: 'Nisan'
+branding:
+  icon: 'upload-cloud'
+  color: 'white'
+inputs:
+  aws-access-key-id:
+    description: ''
+    required: true
+  aws-secret-access-key:
+    description: ''
+    required: true
+  aws-region:
+    description: ''
+    required: true
+  aws-machine-bucket:
+    description: ''
+    required: true
+
+  allocate-machine:
+    description: 'allocate / return machine'
+    required: true
+
+  allocation_id:
+    description: 'allocation id'
+    required: false
+
+outputs:
+  result:
+    description: '`success` or `failure` is set.'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
