@@ -27,6 +27,8 @@ inputs:
     required: false
 
 outputs:
+  allocation_id:
+    description: 'allocation id for the new allocation / the allocation that was returned'
   result:
     description: '`success` or `failure` is set.'
 runs:

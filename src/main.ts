@@ -258,12 +258,18 @@ async function run(input: GithubInput) {
 
     const allocator = new Allocator(machinesConfig, allocatorState);
 
-    if (input.allocateMachine)
-        await allocateMachine(allocator);
+    let allocationId: string;
+    if (input.allocateMachine) {
+        const allocation = await allocateMachine(allocator);
+        allocationId = allocation.allocationId;
+    }
     else {
         assert(input.allocationId, 'AllocationId is required when allocateMachine is false');
         await deallocateMachine(input.allocationId, allocator);
+        allocationId = input.allocationId;
     }
+
+    core.setOutput('allocation_id', allocationId);
 }
 
 async function deallocateMachine(allocationId: string, allocator: Allocator): Promise<void> {
