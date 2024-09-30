@@ -1,75 +1,11 @@
 import * as core from '@actions/core';
-import { S3 } from '@aws-sdk/client-s3';
 import { DescribeInstancesCommand, EC2Client, InstanceStateName, StartInstancesCommand, StopInstancesCommand } from '@aws-sdk/client-ec2';
 import assert from 'assert';
 import { MachinesConfig } from './UnityMachineConfig';
 import { Allocator, IAllocatorState, IMachineAllocation } from './Allocator';
-
-const awsUnityMachinesConfigFile = 'unity-machines.json'; // MachinesConfig
-const awsUnityMachinesAllocationState = 'unity-machines.state.json'; // AllocatorState
-
-const NODE_ENV = process.env['NODE_ENV'];
-
-interface GithubInput {
-    awsAccessKeyId: string
-    awsSecretAccessKey: string
-    awsRegion: string
-    awsMachinesBucket: string
-    allocateMachine: boolean
-
-    /**
-     * Required if `allocateMachine` is false.
-     */
-    allocationId?: string
-}
-
-let input: GithubInput;
-if (NODE_ENV != 'local') {
-    const allocateMachine = core.getInput('allocate-machine') == 'true';
-    input = {
-        awsAccessKeyId: core.getInput('aws-access-key-id', { required: true }),
-        awsSecretAccessKey: core.getInput('aws-secret-access-key', { required: true }),
-        awsRegion: core.getInput('aws-region', { required: true }),
-        awsMachinesBucket: core.getInput('aws-machine-bucket', { required: true }),
-        allocateMachine: allocateMachine,
-        allocationId: core.getInput('allocation-id', { required: !allocateMachine }),
-    };
-} else {
-    console.log('Running locally');
-    // If you want to run it locally, set the environment variables like `$ export SOME_KEY=<your token>`
-    const AWS_ACCESS_KEY_ID = process.env['AWS_ACCESS_KEY_ID'];
-    const AWS_SECRET_ACCESS_KEY = process.env['AWS_SECRET_ACCESS_KEY'];
-    const AWS_BUCKET = process.env['AWS_BUCKET'];
-    const ALLOCATE_MACHINE = process.env['ALLOCATE_MACHINE'];
-    const ALLOCATION_ID = process.env['ALLOCATION_ID'];
-    const AWS_REGION = process.env['AWS_REGION'];
-
-    assert(AWS_ACCESS_KEY_ID, 'AWS_ACCESS_KEY_ID is required');
-    assert(AWS_SECRET_ACCESS_KEY, 'AWS_SECRET_ACCESS_KEY is required');
-    assert(AWS_BUCKET, 'AWS_BUCKET is required');
-    assert(ALLOCATE_MACHINE, 'ALLOCATE_MACHINE is required');
-    assert(AWS_REGION, 'AWS_REGION is required');
-
-    if (ALLOCATE_MACHINE == 'false')
-        assert(ALLOCATION_ID, 'ALLOCATION_ID is required');
-
-    input = {
-        awsAccessKeyId: AWS_ACCESS_KEY_ID,
-        awsSecretAccessKey: AWS_SECRET_ACCESS_KEY,
-        awsRegion: AWS_REGION,
-        awsMachinesBucket: AWS_BUCKET,
-        allocateMachine: ALLOCATE_MACHINE == 'true',
-        allocationId: ALLOCATION_ID,
-    };
-}
-
-const s3 = new S3({
-    region: input.awsRegion,
-    credentials: {
-        accessKeyId: input.awsAccessKeyId,
-        secretAccessKey: input.awsSecretAccessKey,
-    },
-});
+import { GithubInput } from './github-input';
+import { awsUnityMachinesAllocationState, awsUnityMachinesConfigFile, input } from './input';
+import { s3 } from './s3';
 
 const ec2 = new EC2Client({
     region: input.awsRegion,
@@ -129,32 +65,6 @@ async function createAllocatorStateIfNotExists(defaultState: IAllocatorState | n
         Bucket: input.awsMachinesBucket,
         Key: awsUnityMachinesAllocationState,
         Body: JSON.stringify(state, null, 2),
-    });
-}
-
-async function getAllocatorState(): Promise<IAllocatorState> {
-    const data = await s3.getObject({
-        Bucket: input.awsMachinesBucket,
-        Key: awsUnityMachinesAllocationState,
-    });
-
-    if (!data.Body)
-        throw new Error(`Failed to get state from s3 file "${awsUnityMachinesAllocationState}" at "${input.awsMachinesBucket}"`);
-
-    try {
-        const body = await data.Body.transformToString();
-        const state = JSON.parse(body);
-        return state;
-    } catch (error) {
-        throw new Error(`Failed to parse state from s3 file "${awsUnityMachinesAllocationState}" at "${input.awsMachinesBucket}"\n` + error);
-    }
-}
-
-async function saveAllocatorState(state: IAllocatorState): Promise<void> {
-    await s3.putObject({
-        Bucket: input.awsMachinesBucket,
-        Key: awsUnityMachinesAllocationState,
-        Body: JSON.stringify(state),
     });
 }
 
@@ -246,17 +156,12 @@ async function run(input: GithubInput) {
     await createAllocatorStateIfNotExists();
 
     const machinesConfig = await getMachinesConfig();
-    const allocatorState = await getAllocatorState();
 
     core.startGroup('Machines Config');
     core.info(JSON.stringify(machinesConfig, null, 2));
     core.endGroup();
 
-    core.startGroup('Allocator State');
-    core.info(JSON.stringify(allocatorState, null, 2));
-    core.endGroup();
-
-    const allocator = new Allocator(machinesConfig, allocatorState);
+    const allocator = new Allocator(machinesConfig);
 
     let allocationId: string;
     if (input.allocateMachine) {
@@ -275,10 +180,7 @@ async function run(input: GithubInput) {
 async function deallocateMachine(allocationId: string, allocator: Allocator): Promise<void> {
     core.info(`Deallocating machine with allocationId "${allocationId}"`);
 
-    const machine = allocator.free(allocationId);
-
-    core.debug(`Saving allocator state "${JSON.stringify(allocator.state)}"`);
-    await saveAllocatorState(allocator.state);
+    const machine = await allocator.free(allocationId);
 
     const allocCount = allocator.instanceAllocationCount(machine.instanceId);
     if (allocCount > 0) {
@@ -294,7 +196,7 @@ async function deallocateMachine(allocationId: string, allocator: Allocator): Pr
 async function allocateMachine(allocator: Allocator): Promise<IMachineAllocation> {
     core.info('Allocating a new machine');
 
-    const allocation = allocator.allocate();
+    const allocation = await allocator.allocate(); // todo dealocate on error?
 
     if (!allocation)
         throw new Error('No machines available to allocate');
@@ -309,9 +211,6 @@ async function allocateMachine(allocator: Allocator): Promise<IMachineAllocation
         core.notice(`Starting machine "${allocation.instanceId}"`);
         await startMachine(allocation.instanceId);
     }
-
-    core.debug(`Saving allocator state "${JSON.stringify(allocator.state)}"`);
-    await saveAllocatorState(allocator.state);
 
     return allocation;
 }
