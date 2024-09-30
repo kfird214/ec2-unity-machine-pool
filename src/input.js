@@ -41,7 +41,7 @@ if (NODE_ENV != 'local') {
         awsRegion: core.getInput('aws-region', { required: true }),
         awsMachinesBucket: core.getInput('aws-machine-bucket', { required: true }),
         allocateMachine: allocateMachine,
-        allocationId: core.getInput('allocation-id', { required: !allocateMachine }),
+        allocationId: core.getInput('allocation_id', { required: !allocateMachine }),
     };
 }
 else {
