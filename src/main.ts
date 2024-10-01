@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import { DescribeInstancesCommand, EC2Client, InstanceStateName, StartInstancesCommand, StopInstancesCommand } from '@aws-sdk/client-ec2';
 import assert from 'assert';
-import { MachinesConfig } from './UnityMachineConfig';
+import { IMachinesConfig } from './UnityMachineConfig';
 import { Allocator, IAllocatorState, IMachineAllocation } from './Allocator';
 import { GithubInput } from './github-input';
 import { awsUnityMachinesAllocationState, awsUnityMachinesConfigFile, input } from './input';
@@ -15,7 +15,7 @@ const ec2 = new EC2Client({
     },
 });
 
-async function getMachinesConfig(): Promise<MachinesConfig> {
+async function getMachinesConfig(): Promise<IMachinesConfig> {
     const data = await s3.getObject({
         Bucket: input.awsMachinesBucket,
         Key: awsUnityMachinesConfigFile,
@@ -164,20 +164,23 @@ async function run(input: GithubInput) {
     const allocator = new Allocator(machinesConfig);
 
     let allocationId: string;
+    let machineAlloc: IMachineAllocation;
     if (input.allocateMachine) {
-        const allocation = await allocateMachine(allocator);
-        allocationId = allocation.allocationId;
+        machineAlloc = await allocateMachine(allocator);
+        allocationId = machineAlloc.allocationId;
     }
     else {
         assert(input.allocationId, 'AllocationId is required when allocateMachine is false');
-        await deallocateMachine(input.allocationId, allocator);
+        machineAlloc = await deallocateMachine(input.allocationId, allocator);
         allocationId = input.allocationId;
     }
 
     core.setOutput('allocation_id', allocationId);
+    core.setOutput('instance_id', machineAlloc.instanceId);
+    core.setOutput('instance_name', machineAlloc.instanceName);
 }
 
-async function deallocateMachine(allocationId: string, allocator: Allocator): Promise<void> {
+async function deallocateMachine(allocationId: string, allocator: Allocator): Promise<IMachineAllocation> {
     core.info(`Deallocating machine with allocationId "${allocationId}"`);
 
     const machine = await allocator.free(allocationId);
@@ -185,12 +188,13 @@ async function deallocateMachine(allocationId: string, allocator: Allocator): Pr
     const allocCount = allocator.instanceAllocationCount(machine.instanceId);
     if (allocCount > 0) {
         core.debug(`Machine "${machine.instanceId}" still has ${allocCount} allocations`);
-        return;
     }
     else {
         core.debug(`Machine "${JSON.stringify(machine)}" has no more allocations, stopping it`);
         await stopMachine(machine.instanceId);
     }
+
+    return machine;
 }
 
 async function allocateMachine(allocator: Allocator): Promise<IMachineAllocation> {

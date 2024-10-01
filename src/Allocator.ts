@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import * as crypto from 'crypto';
-import { MachinesConfig } from './UnityMachineConfig';
+import { IMachinesConfig } from './UnityMachineConfig';
 import { s3 } from './s3';
 import { awsUnityMachinesAllocationState, input } from './input';
 
@@ -16,6 +16,11 @@ export interface IMachineAllocation {
     instanceId: string;
 
     /**
+     * The name of the instance.
+     */
+    instanceName?: string;
+
+    /**
      * The count of the allocation of the same instaceId. 0 is first allocation.
      */
     reuseCount: number;
@@ -29,9 +34,9 @@ export interface IAllocatorState {
 
 export class Allocator {
     private state: IAllocatorState = { allocatedMachines: {} };
-    private machinesConfig: MachinesConfig;
+    private machinesConfig: IMachinesConfig;
 
-    constructor(machinesConfig: MachinesConfig) {
+    constructor(machinesConfig: IMachinesConfig) {
         this.machinesConfig = machinesConfig;
     }
 
@@ -191,10 +196,13 @@ export class Allocator {
     }
 
     private newAllocation(instanceId: string, reuseCount: number = 0): IMachineAllocation {
+        const machine = this.machinesConfig.machines.find(m => m.instanceId == instanceId);
+
         return {
             allocationId: crypto.randomUUID(),
             instanceId: instanceId,
             reuseCount: reuseCount,
+            instanceName: machine?.instanceName,
         };
     }
 }

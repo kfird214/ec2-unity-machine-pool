@@ -5,12 +5,17 @@ export interface MachineConfig {
     instanceId: string;
 
     /**
+     * The name of the instance.
+     */
+    instanceName: string;
+
+    /**
      * The AWS region where the machine is located.
      */
     region: string;
 }
 
-export interface MachinesConfig {
+export interface IMachinesConfig {
     /**
      * The list of machines that can be allocated.
      */
