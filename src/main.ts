@@ -153,6 +153,14 @@ async function stopMachine(instanceId: string): Promise<void> {
     core.notice(`Stopped instance "${instanceId}"`);
 }
 
+/**
+ * {@link https://docs.aws.amazon.com/AWSEC2/latest/APIReference/API_InstanceState.html|InstanceState}
+ * 
+ * {@link https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-lifecycle.html|Instance Lifecycle}
+ * 
+ * @param state the aws ec2 instance state
+ * @returns true if it is an invalid state for starting the machine
+ */
 function isInvalidMachineState(state: InstanceStateName): boolean {
     return state == InstanceStateName.terminated || state == InstanceStateName.shutting_down;
 }
