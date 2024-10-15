@@ -1,11 +1,10 @@
 import * as core from '@actions/core';
 import { GithubInput } from "./github-input";
 import assert from 'assert';
+import { NODE_ENV } from './env';
 
 export const awsUnityMachinesConfigFile = 'unity-machines.json'; // MachinesConfig
 export const awsUnityMachinesAllocationState = 'unity-machines.state.json'; // AllocatorState
-
-const NODE_ENV = process.env['NODE_ENV'];
 
 let inputObj: GithubInput;
 if (NODE_ENV != 'local') {

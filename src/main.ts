@@ -165,6 +165,10 @@ function isInvalidMachineState(state: InstanceStateName): boolean {
     return state == InstanceStateName.terminated || state == InstanceStateName.shutting_down;
 }
 
+function isMachineStateRunningOrWillRun(state: InstanceStateName): boolean {
+    return state == InstanceStateName.running || state == InstanceStateName.pending;
+}
+
 /**
  * validates the current state of the machines and the allocator state by checking aws ec2 instances
  * @param machinesConfig machines config
@@ -211,19 +215,19 @@ async function validateMachinesAllocatorState(machinesConfig: IMachinesConfig, s
             stateChanged = true;
             continue;
         }
-        
-        const running = ec2State == InstanceStateName.running;
 
-        if (running && !hasAllocations) {
-            core.warning(`Machine "${instanceId}" is running but has no allocations. stoping it and removing from state`);
+        const startOrStarting = isMachineStateRunningOrWillRun(ec2State);
+
+        if (startOrStarting && !hasAllocations) {
+            core.warning(`Machine "${instanceId}" is running/pending but has no allocations. stoping it and removing from state`);
             await stopMachine(instanceId);
             delete newState.allocatedMachines[instanceId];
             stateChanged = true;
             continue;
         }
 
-        if (!running && hasAllocations) {
-            core.warning(`Machine "${instanceId}" is not running but has allocations. removing from state`);
+        if (!startOrStarting && hasAllocations) {
+            core.warning(`Machine "${instanceId}" is not running/pending but has allocations. removing from state`);
             delete newState.allocatedMachines[instanceId];
             stateChanged = true;
             continue;
