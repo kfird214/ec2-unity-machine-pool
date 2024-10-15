@@ -2,13 +2,33 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "type": "typescript",
+      "label": "tsc: build - tsconfig.json",
+      "detail": "Compiling",
+      "tsconfig": "tsconfig.json",
+      "problemMatcher": [
+        "$tsc"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "icon": {
+        "id": "tools",
+        "color": "terminal.ansiYellow"
+      },
+      // "runOptions": {
+      //   "runOn": "folderOpen"
+      // },
+    },
+    {
       "type": "npm",
       "script": "package",
       "label": "npm: package",
       "detail": "ncc build src/main.js -o dist --source-map --license licenses.txt",
       "group": {
         "kind": "build",
-        "isDefault": true
+        "isDefault": false
       },
       "problemMatcher": [
         "$tsc",

@@ -36,8 +36,21 @@ export class Allocator {
     private state: IAllocatorState = { allocatedMachines: {} };
     private machinesConfig: IMachinesConfig;
 
-    constructor(machinesConfig: IMachinesConfig) {
+    public get loadedState(): IAllocatorState { return this.state; }
+
+    private constructor(machinesConfig: IMachinesConfig) {
         this.machinesConfig = machinesConfig;
+    }
+
+    public static async New(machinesConfig: IMachinesConfig) {
+        const allocator = new Allocator(machinesConfig);
+        await allocator.loadAllocatorState();
+        return allocator;
+    }
+
+    public async forceSaveValidState(IAllocatorState: IAllocatorState): Promise<void> {
+        this.state = IAllocatorState;
+        await this.saveAllocatorState();
     }
 
     public async allocate(): Promise<IMachineAllocation> {
@@ -101,6 +114,7 @@ export class Allocator {
     }
 
     private async saveAllocatorState(): Promise<void> {
+        this.state = Allocator.validateFetchedState(this.state);
         core.debug(`Saving allocator state "${JSON.stringify(this.state)}"`);
 
         await s3.putObject({
@@ -111,10 +125,8 @@ export class Allocator {
     }
 
     private async loadAllocatorState(): Promise<IAllocatorState> {
-        let state = await this.getAllocatorState();
-        state = state ?? { allocatedMachines: {} };
-        state.allocatedMachines = state.allocatedMachines ?? {};
-        this.state = state;
+        let state = await this.fetchAllocatorState();
+        this.state = Allocator.validateFetchedState(state);
 
         core.startGroup('Allocator State');
         core.info(JSON.stringify(state, null, 2));
@@ -123,7 +135,34 @@ export class Allocator {
         return state;
     }
 
-    private async getAllocatorState(): Promise<IAllocatorState> {
+    private static validateFetchedState(state: IAllocatorState): IAllocatorState {
+        state = state ?? { allocatedMachines: {} };
+        // state = structuredClone(state);
+        state.allocatedMachines = state.allocatedMachines ?? {};
+
+        // if allocated machines has empty arrays or null, remove them
+        for (const instanceId in state.allocatedMachines) {
+            if (!(instanceId in state.allocatedMachines))
+                continue;
+
+            if (!state.allocatedMachines[instanceId]) {
+                const value = state.allocatedMachines[instanceId];
+                delete state.allocatedMachines[instanceId];
+                core.debug(`Removed allocated machine "${instanceId}" value was falsy "${JSON.stringify(value)}"`);
+            }
+            else if (Array.isArray(state.allocatedMachines[instanceId])) {
+                if (state.allocatedMachines[instanceId]!.length == 0) {
+                    const value = state.allocatedMachines[instanceId];
+                    delete state.allocatedMachines[instanceId];
+                    core.debug(`Removed allocated machine "${instanceId}" value was empty array "${JSON.stringify(value)}"`);
+                }
+            }
+        }
+
+        return state;
+    }
+
+    private async fetchAllocatorState(): Promise<IAllocatorState> {
         const data = await s3.getObject({
             Bucket: input.awsMachinesBucket,
             Key: awsUnityMachinesAllocationState,

@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import { DescribeInstancesCommand, EC2Client, InstanceStateName, StartInstancesCommand, StopInstancesCommand } from '@aws-sdk/client-ec2';
 import assert from 'assert';
-import { IMachinesConfig } from './UnityMachineConfig';
+import { IMachinesConfig, MachineConfig } from './UnityMachineConfig';
 import { Allocator, IAllocatorState, IMachineAllocation } from './Allocator';
 import { GithubInput } from './github-input';
 import { awsUnityMachinesAllocationState, awsUnityMachinesConfigFile, input } from './input';
@@ -15,7 +15,7 @@ const ec2 = new EC2Client({
     },
 });
 
-async function getMachinesConfig(): Promise<IMachinesConfig> {
+async function fetchMachinesConfig(): Promise<IMachinesConfig> {
     const data = await s3.getObject({
         Bucket: input.awsMachinesBucket,
         Key: awsUnityMachinesConfigFile,
@@ -89,8 +89,7 @@ async function createBucketIfNotExists(): Promise<void> {
     }
 }
 
-
-async function isMachineRunning(instanceId: string): Promise<boolean> {
+async function fetchMachineState(instanceId: string): Promise<InstanceStateName> {
     const data = await ec2.send(new DescribeInstancesCommand({
         InstanceIds: [instanceId],
     }));
@@ -107,7 +106,11 @@ async function isMachineRunning(instanceId: string): Promise<boolean> {
     if (!stateName)
         throw new Error(`No state found for instance "${instanceId}"`);
 
-    return stateName == InstanceStateName.running;
+    return stateName;
+}
+
+async function isMachineRunning(instanceId: string): Promise<boolean> {
+    return await fetchMachineState(instanceId) == InstanceStateName.running;
 }
 
 async function startMachine(instanceId: string): Promise<void> {
@@ -150,18 +153,110 @@ async function stopMachine(instanceId: string): Promise<void> {
     core.notice(`Stopped instance "${instanceId}"`);
 }
 
+function isInvalidMachineState(state: InstanceStateName): boolean {
+    return state == InstanceStateName.terminated || state == InstanceStateName.shutting_down;
+}
+
+/**
+ * validates the current state of the machines and the allocator state by checking aws ec2 instances
+ * @param machinesConfig machines config
+ * @param state current allocator state
+ * @returns a valid allocator state or null if already valid
+ */
+async function validateMachinesAllocatorState(machinesConfig: IMachinesConfig, state: IAllocatorState): Promise<IAllocatorState | null> {
+    const areMachinesRunningTasks = machinesConfig.machines.map(m => (async () => {
+        const ec2State = await fetchMachineState(m.instanceId);
+        return { config: m, ec2State };
+    })());
+
+    const areMachinesRunning = await Promise.all(areMachinesRunningTasks);
+
+    // { instanceId: boolean }
+    const machineStateVsActualState: { [key: string]: { ec2State: InstanceStateName | null, hasAllocations: boolean, config: MachineConfig } } = {};
+    for (const machine of machinesConfig.machines) {
+        const anyAllocationHasMachine = Object.entries(state.allocatedMachines)
+            .filter(([allocId, allocs]) => !!allocs)
+            .some(([allocId, allocs]) => allocs?.some(alloc => alloc.instanceId == machine.instanceId));
+
+        const findMachine = areMachinesRunning.find(m => m.config.instanceId == machine.instanceId);
+
+        machineStateVsActualState[machine.instanceId] = {
+            config: machine,
+            ec2State: findMachine?.ec2State ?? null,
+            hasAllocations: anyAllocationHasMachine,
+        };
+    }
+
+    core.startGroup('Machines has allocations');
+    core.info(JSON.stringify(machineStateVsActualState, null, 2));
+    core.endGroup();
+
+    const newState = JSON.parse(JSON.stringify(state)) as IAllocatorState;
+    // const newState = structuredClone(state) as IAllocatorState;
+
+    core.debug('Validating machines state');
+    let stateChanged = false;
+    for (const [instanceId, { ec2State, hasAllocations, config }] of Object.entries(machineStateVsActualState)) {
+        if (ec2State == null || isInvalidMachineState(ec2State)) {
+            core.warning(`Machine "${instanceId}" is in an invalid state "${ec2State}". removing from state`);
+            delete newState.allocatedMachines[instanceId];
+            stateChanged = true;
+            continue;
+        }
+        
+        const running = ec2State == InstanceStateName.running;
+
+        if (running && !hasAllocations) {
+            core.warning(`Machine "${instanceId}" is running but has no allocations. stoping it and removing from state`);
+            await stopMachine(instanceId);
+            delete newState.allocatedMachines[instanceId];
+            stateChanged = true;
+            continue;
+        }
+
+        if (!running && hasAllocations) {
+            core.warning(`Machine "${instanceId}" is not running but has allocations. removing from state`);
+            delete newState.allocatedMachines[instanceId];
+            stateChanged = true;
+            continue;
+        }
+
+        core.debug(`Machine "${instanceId}" is in a valid state`);
+    }
+
+    if (!stateChanged)
+        return null;
+
+    core.startGroup('New Allocator State');
+    core.info(JSON.stringify(newState, null, 2));
+    core.endGroup();
+
+    return newState;
+}
+
 async function run(input: GithubInput) {
     core.debug('Starting the action');
     await createBucketIfNotExists();
     await createAllocatorStateIfNotExists();
 
-    const machinesConfig = await getMachinesConfig();
+    const machinesConfig = await fetchMachinesConfig();
 
     core.startGroup('Machines Config');
     core.info(JSON.stringify(machinesConfig, null, 2));
     core.endGroup();
 
-    const allocator = new Allocator(machinesConfig);
+    const allocator = await Allocator.New(machinesConfig);
+
+    {
+        const newState = await validateMachinesAllocatorState(machinesConfig, allocator.loadedState);
+        if (newState) {
+            core.notice('Saving new state');
+            await allocator.forceSaveValidState(newState);
+        }
+        else {
+            core.debug('State is valid');
+        }
+    }
 
     let allocationId: string;
     let machineAlloc: IMachineAllocation;
