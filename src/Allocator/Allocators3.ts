@@ -4,9 +4,10 @@ import { IMachinesConfig } from '../UnityMachineConfig';
 import { IAllocatorState } from './IAllocatorState';
 import { IMachineAllocation } from './IMachineAllocation';
 import { IStateFetcher } from '../StateFetcher/IStateFetcher';
+import { IAllocator } from './IAllocator';
 
 
-export class Allocator {
+export class AllocatorS3 implements IAllocator {
     private state: IAllocatorState = { allocatedMachines: {} };
     private machinesConfig: IMachinesConfig;
     private stateFetcher: IStateFetcher;
@@ -18,8 +19,8 @@ export class Allocator {
         this.stateFetcher = sateFetcher;
     }
 
-    public static async Create(machinesConfig: IMachinesConfig, sateFetcher: IStateFetcher): Promise<Allocator> {
-        const allocator = new Allocator(machinesConfig, sateFetcher);
+    public static async Create(machinesConfig: IMachinesConfig, sateFetcher: IStateFetcher): Promise<AllocatorS3> {
+        const allocator = new AllocatorS3(machinesConfig, sateFetcher);
         await allocator.loadAllocatorState();
         return allocator;
     }
@@ -84,13 +85,13 @@ export class Allocator {
         }
     }
 
-    public instanceAllocationCount(instanceId: string): number {
+    public async instanceAllocationCount(instanceId: string): Promise<number> {
         const a = this.state.allocatedMachines[instanceId];
         return a != null ? a.length : 0;
     }
 
     private async saveAllocatorState(): Promise<void> {
-        this.state = Allocator.validateFetchedState(this.state);
+        this.state = AllocatorS3.validateFetchedState(this.state);
         core.debug(`Saving allocator state "${JSON.stringify(this.state)}"`);
 
         await this.stateFetcher.saveAllocatorState(this.state);
@@ -98,7 +99,7 @@ export class Allocator {
 
     private async loadAllocatorState(): Promise<IAllocatorState> {
         let state = await this.stateFetcher.fetchAllocatorState();
-        this.state = Allocator.validateFetchedState(state);
+        this.state = AllocatorS3.validateFetchedState(state);
 
         core.startGroup('Allocator State');
         core.info(JSON.stringify(state, null, 2));

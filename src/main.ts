@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import assert from 'assert';
-import { Allocator } from './Allocator/Allocator';
+import { AllocatorS3 } from './Allocator/Allocators3';
 import { IMachineAllocation } from './Allocator/IMachineAllocation';
 import { GithubInput } from './github-input';
 import { input } from './input';
@@ -9,6 +9,7 @@ import { IMachineConfigFetcher } from './MachineConfigFetcher/IMachineConfigFetc
 import { MachineConfigFetcherS3 } from './MachineConfigFetcher/MachineConfigFetcherS3';
 import { IStateFetcher } from './StateFetcher/IStateFetcher';
 import { StateFetchers3 } from './StateFetcher/StateFetcherS3';
+import { IAllocator } from './Allocator/IAllocator';
 
 async function run(input: GithubInput) {
     core.debug('Starting the action');
@@ -21,7 +22,7 @@ async function run(input: GithubInput) {
     core.info(JSON.stringify(machinesConfig, null, 2));
     core.endGroup();
 
-    const allocator = await Allocator.Create(machinesConfig, stateFetcher);
+    const allocator = await AllocatorS3.Create(machinesConfig, stateFetcher);
 
     {
         const newState = await validateMachinesAllocatorState(machinesConfig, allocator.loadedState);
@@ -51,12 +52,12 @@ async function run(input: GithubInput) {
     core.setOutput('instance_name', machineAlloc.instanceName);
 }
 
-async function deallocateMachine(allocationId: string, allocator: Allocator): Promise<IMachineAllocation> {
+async function deallocateMachine(allocationId: string, allocator: IAllocator): Promise<IMachineAllocation> {
     core.info(`Deallocating machine with allocationId "${allocationId}"`);
 
     const machine = await allocator.free(allocationId);
 
-    const allocCount = allocator.instanceAllocationCount(machine.instanceId);
+    const allocCount = await allocator.instanceAllocationCount(machine.instanceId);
     if (allocCount > 0) {
         core.debug(`Machine "${machine.instanceId}" still has ${allocCount} allocations`);
     }
@@ -68,7 +69,7 @@ async function deallocateMachine(allocationId: string, allocator: Allocator): Pr
     return machine;
 }
 
-async function allocateMachine(allocator: Allocator): Promise<IMachineAllocation> {
+async function allocateMachine(allocator: IAllocator): Promise<IMachineAllocation> {
     core.info('Allocating a new machine');
 
     const allocation = await allocator.allocate(); // todo dealocate on error?
