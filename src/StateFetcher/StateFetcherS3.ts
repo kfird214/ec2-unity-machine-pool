@@ -1,13 +1,13 @@
 import * as core from '@actions/core';
+import { awsUnityMachinesAllocationState, input } from '../input';
 import { s3 } from '../s3';
-import { awsUnityMachinesAllocationState, awsUnityMachinesConfigFile, input } from '../input';
 
 import { IAllocatorState } from "../Allocator/IAllocatorState";
-import { IMachinesConfig } from "../UnityMachineConfig";
 import { IStateFetcher } from "./IStateFetcher";
 
 
 export class StateFetchers3 implements IStateFetcher {
+    private constructor() { }
 
     public static async Create(): Promise<StateFetchers3> {
         await StateFetchers3.createBucketIfNotExists();
@@ -38,28 +38,6 @@ export class StateFetchers3 implements IStateFetcher {
             return state;
         } catch (error) {
             throw new Error(`Failed to parse state from s3 file "${awsUnityMachinesAllocationState}" at "${input.awsMachinesBucket}"\n` + error);
-        }
-    }
-
-    public async fetchMachinesConfig(): Promise<IMachinesConfig> {
-        const data = await s3.getObject({
-            Bucket: input.awsMachinesBucket,
-            Key: awsUnityMachinesConfigFile,
-        });
-
-        if (!data.Body)
-            throw new Error(`Failed to get config from s3 file "${awsUnityMachinesConfigFile}" at "${input.awsMachinesBucket}"`);
-
-        try {
-            const body = await data.Body.transformToString();
-            const config = JSON.parse(body);
-
-            if (config.machines.length == 0)
-                throw new Error(`No machines found in config`);
-
-            return config;
-        } catch (error) {
-            throw new Error(`Failed to parse config from s3 file "${awsUnityMachinesConfigFile}" at "${input.awsMachinesBucket}" ` + (error ?? '').toString());
         }
     }
 

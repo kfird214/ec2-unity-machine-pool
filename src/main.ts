@@ -1,18 +1,21 @@
 import * as core from '@actions/core';
 import assert from 'assert';
 import { Allocator } from './Allocator/Allocator';
+import { IMachineAllocation } from './Allocator/IMachineAllocation';
 import { GithubInput } from './github-input';
 import { input } from './input';
 import { isMachineRunning, startMachine, stopMachine, validateMachinesAllocatorState } from './machine_state_manager';
+import { IMachineConfigFetcher } from './MachineConfigFetcher/IMachineConfigFetcher';
+import { MachineConfigFetcherS3 } from './MachineConfigFetcher/MachineConfigFetcherS3';
 import { IStateFetcher } from './StateFetcher/IStateFetcher';
 import { StateFetchers3 } from './StateFetcher/StateFetcherS3';
-import { IMachineAllocation } from './Allocator/IMachineAllocation';
 
 async function run(input: GithubInput) {
     core.debug('Starting the action');
 
     const stateFetcher: IStateFetcher = await StateFetchers3.Create();
-    const machinesConfig = await stateFetcher.fetchMachinesConfig();
+    const machineConfigFetcher: IMachineConfigFetcher = await MachineConfigFetcherS3.Create();
+    const machinesConfig = await machineConfigFetcher.fetchMachinesConfig();
 
     core.startGroup('Machines Config');
     core.info(JSON.stringify(machinesConfig, null, 2));
