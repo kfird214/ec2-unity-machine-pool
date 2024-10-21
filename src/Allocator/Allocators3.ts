@@ -5,6 +5,7 @@ import { IAllocatorState } from './IAllocatorState';
 import { IMachineAllocation } from './IMachineAllocation';
 import { IStateFetcher } from '../StateFetcher/IStateFetcher';
 import { IAllocator } from './IAllocator';
+import { AllocationNotfound } from './AllocationNotfound';
 
 
 export class AllocatorS3 implements IAllocator {
@@ -79,7 +80,7 @@ export class AllocatorS3 implements IAllocator {
                 }
             }
 
-            throw new Error(`Allocation with id "${allocationId}" not found`);
+            throw new AllocationNotfound(allocationId);
         } finally {
             await this.saveAllocatorState();
         }

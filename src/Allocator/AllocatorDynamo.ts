@@ -7,6 +7,7 @@ import { IMachineAllocation } from "./IMachineAllocation";
 import { input } from "../input";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { IMachinesConfig, MachineConfig } from "../UnityMachineConfig";
+import { AllocationNotfound } from './AllocationNotfound';
 
 // interface IMachineAllocationDynamoItem {
 //     allocationId: string;
@@ -141,7 +142,7 @@ export class AllocatorDynamo implements IAllocator {
         }));
 
         if (!res.Items || res.Items.length == 0) {
-            throw new Error(`Allocation with id "${allocationId}" not found`);
+            throw new AllocationNotfound(allocationId);
         }
 
         const alloc = unmarshall(res.Items[0]) as IMachineAllocation;

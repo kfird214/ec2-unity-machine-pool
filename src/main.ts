@@ -11,6 +11,7 @@ import { IStateFetcher } from './StateFetcher/IStateFetcher';
 import { StateFetchers3 } from './StateFetcher/StateFetcherS3';
 import { IAllocator } from './Allocator/IAllocator';
 import { AllocatorDynamo } from './Allocator/AllocatorDynamo';
+import { AllocationNotfound } from './Allocator/AllocationNotfound';
 
 async function run(input: GithubInput) {
     core.debug('Starting the action');
@@ -45,7 +46,13 @@ async function run(input: GithubInput) {
     }
     else {
         assert(input.allocationId, 'AllocationId is required when allocateMachine is false');
-        machineAlloc = await deallocateMachine(input.allocationId, allocator);
+        const machineAll = await deallocateMachine(input.allocationId, allocator);
+
+        if (machineAll === null) {
+            return;
+        }
+
+        machineAlloc = machineAll;
         allocationId = input.allocationId;
     }
 
@@ -54,21 +61,30 @@ async function run(input: GithubInput) {
     core.setOutput('instance_name', machineAlloc.instanceName);
 }
 
-async function deallocateMachine(allocationId: string, allocator: IAllocator): Promise<IMachineAllocation> {
+async function deallocateMachine(allocationId: string, allocator: IAllocator): Promise<IMachineAllocation | null> {
     core.info(`Deallocating machine with allocationId "${allocationId}"`);
 
-    const machine = await allocator.free(allocationId);
+    try {
+        const machine = await allocator.free(allocationId);
+        const allocCount = await allocator.instanceAllocationCount(machine.instanceId);
+        if (allocCount > 0) {
+            core.debug(`Machine "${machine.instanceId}" still has ${allocCount} allocations`);
+        }
+        else {
+            core.debug(`Machine "${JSON.stringify(machine)}" has no more allocations, stopping it`);
+            await stopMachine(machine.instanceId);
+        }
 
-    const allocCount = await allocator.instanceAllocationCount(machine.instanceId);
-    if (allocCount > 0) {
-        core.debug(`Machine "${machine.instanceId}" still has ${allocCount} allocations`);
+        return machine;
+    } catch (error) {
+        if (error instanceof AllocationNotfound) {
+            core.warning(`Allocation "${allocationId}" not found`);
+            return null;
+        }
+        else {
+            throw error;
+        }
     }
-    else {
-        core.debug(`Machine "${JSON.stringify(machine)}" has no more allocations, stopping it`);
-        await stopMachine(machine.instanceId);
-    }
-
-    return machine;
 }
 
 async function allocateMachine(allocator: IAllocator): Promise<IMachineAllocation> {
