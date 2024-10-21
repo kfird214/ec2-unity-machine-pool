@@ -3,6 +3,7 @@ export interface GithubInput {
     awsSecretAccessKey: string
     awsRegion: string
     awsMachinesBucket: string
+    awsDynamoDbTable: string
     allocateMachine: boolean
 
     /**

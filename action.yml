@@ -6,16 +6,19 @@ branding:
   color: 'white'
 inputs:
   aws-access-key-id:
-    description: ''
+    description: 'aws access key id with permissions to create ec2 instances and the state resources'
     required: true
   aws-secret-access-key:
-    description: ''
+    description: 'aws secret access key with permissions to create ec2 instances and the state resources'
     required: true
   aws-region:
-    description: ''
+    description: 'region for aws state resource'
     required: true
   aws-machine-bucket:
-    description: ''
+    description: 'aws s3 bucket name for machine allocator state'
+    required: true
+  aws-dynamodb-table:
+    description: 'aws dynamodb table name for machine allocator state'
     required: true
 
   allocate-machine:

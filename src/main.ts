@@ -1,6 +1,6 @@
 import * as core from '@actions/core';
 import assert from 'assert';
-import { AllocatorS3 } from './Allocator/Allocators3';
+import { AllocatorS3 } from './Allocator/AllocatorS3';
 import { IMachineAllocation } from './Allocator/IMachineAllocation';
 import { GithubInput } from './github-input';
 import { input } from './input';
@@ -10,11 +10,11 @@ import { MachineConfigFetcherS3 } from './MachineConfigFetcher/MachineConfigFetc
 import { IStateFetcher } from './StateFetcher/IStateFetcher';
 import { StateFetchers3 } from './StateFetcher/StateFetcherS3';
 import { IAllocator } from './Allocator/IAllocator';
+import { AllocatorDynamo } from './Allocator/AllocatorDynamo';
 
 async function run(input: GithubInput) {
     core.debug('Starting the action');
 
-    const stateFetcher: IStateFetcher = await StateFetchers3.Create();
     const machineConfigFetcher: IMachineConfigFetcher = await MachineConfigFetcherS3.Create();
     const machinesConfig = await machineConfigFetcher.fetchMachinesConfig();
 
@@ -22,9 +22,11 @@ async function run(input: GithubInput) {
     core.info(JSON.stringify(machinesConfig, null, 2));
     core.endGroup();
 
-    const allocator = await AllocatorS3.Create(machinesConfig, stateFetcher);
+    // const stateFetcher: IStateFetcher = await StateFetchers3.Create();
+    // const allocator: IAllocator = await AllocatorS3.Create(machinesConfig, stateFetcher);
+    const allocator: IAllocator = await AllocatorDynamo.Create(machinesConfig);
 
-    {
+    if (allocator instanceof AllocatorS3) {
         const newState = await validateMachinesAllocatorState(machinesConfig, allocator.loadedState);
         if (newState) {
             core.notice('Saving new state');

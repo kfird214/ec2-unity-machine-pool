@@ -16,6 +16,7 @@ if (NODE_ENV != 'local') {
         awsMachinesBucket: core.getInput('aws-machine-bucket', { required: true }),
         allocateMachine: allocateMachine,
         allocationId: core.getInput('allocation_id', { required: !allocateMachine }),
+        awsDynamoDbTable: core.getInput('aws-dynamodb-table', { required: true }),
     };
 } else {
     console.log('Running locally');
@@ -23,6 +24,7 @@ if (NODE_ENV != 'local') {
     const AWS_ACCESS_KEY_ID = process.env['AWS_ACCESS_KEY_ID'];
     const AWS_SECRET_ACCESS_KEY = process.env['AWS_SECRET_ACCESS_KEY'];
     const AWS_BUCKET = process.env['AWS_BUCKET'];
+    const AWS_DYNAMODB_TABLE = process.env['AWS_DYNAMODB_TABLE'];
     const ALLOCATE_MACHINE = process.env['ALLOCATE_MACHINE'];
     const ALLOCATION_ID = process.env['ALLOCATION_ID'];
     const AWS_REGION = process.env['AWS_REGION'];
@@ -30,6 +32,7 @@ if (NODE_ENV != 'local') {
     assert(AWS_ACCESS_KEY_ID, 'AWS_ACCESS_KEY_ID is required');
     assert(AWS_SECRET_ACCESS_KEY, 'AWS_SECRET_ACCESS_KEY is required');
     assert(AWS_BUCKET, 'AWS_BUCKET is required');
+    assert(AWS_DYNAMODB_TABLE, 'AWS_DYNAMODB_TABLE is required');
     assert(ALLOCATE_MACHINE, 'ALLOCATE_MACHINE is required');
     assert(AWS_REGION, 'AWS_REGION is required');
 
@@ -43,6 +46,7 @@ if (NODE_ENV != 'local') {
         awsMachinesBucket: AWS_BUCKET,
         allocateMachine: ALLOCATE_MACHINE == 'true',
         allocationId: ALLOCATION_ID,
+        awsDynamoDbTable: AWS_DYNAMODB_TABLE,
     };
 }
 
