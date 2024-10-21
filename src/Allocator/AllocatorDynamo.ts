@@ -151,6 +151,9 @@ export class AllocatorDynamo implements IAllocator {
             TableName: input.awsDynamoDbTable,
             Key: {
                 'allocationId': { S: allocationId },
+
+                // sort key instanceId
+                'instanceId': { S: alloc.instanceId },
             },
         }));
 
