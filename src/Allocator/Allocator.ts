@@ -1,49 +1,25 @@
 import * as core from '@actions/core';
 import * as crypto from 'crypto';
-import { IMachinesConfig } from './UnityMachineConfig';
-import { s3 } from './s3';
-import { awsUnityMachinesAllocationState, input } from './input';
+import { IMachinesConfig } from '../UnityMachineConfig';
+import { IAllocatorState } from './IAllocatorState';
+import { IMachineAllocation } from './IMachineAllocation';
+import { IStateFetcher } from '../StateFetcher/IStateFetcher';
 
-export interface IMachineAllocation {
-    /**
-     * Randomly generated UUID for the allocation.
-     */
-    allocationId: string;
-
-    /**
-     * The AWS instanceId of the machine.
-     */
-    instanceId: string;
-
-    /**
-     * The name of the instance.
-     */
-    instanceName?: string;
-
-    /**
-     * The count of the allocation of the same instaceId. 0 is first allocation.
-     */
-    reuseCount: number;
-}
-
-export interface IAllocatorState {
-    allocatedMachines: {
-        [allocationId: string]: IMachineAllocation[] | null | undefined;
-    }
-};
 
 export class Allocator {
     private state: IAllocatorState = { allocatedMachines: {} };
     private machinesConfig: IMachinesConfig;
+    private stateFetcher: IStateFetcher;
 
     public get loadedState(): IAllocatorState { return this.state; }
 
-    private constructor(machinesConfig: IMachinesConfig) {
+    private constructor(machinesConfig: IMachinesConfig, sateFetcher: IStateFetcher) {
         this.machinesConfig = machinesConfig;
+        this.stateFetcher = sateFetcher;
     }
 
-    public static async New(machinesConfig: IMachinesConfig) {
-        const allocator = new Allocator(machinesConfig);
+    public static async Create(machinesConfig: IMachinesConfig, sateFetcher: IStateFetcher): Promise<Allocator> {
+        const allocator = new Allocator(machinesConfig, sateFetcher);
         await allocator.loadAllocatorState();
         return allocator;
     }
@@ -117,15 +93,11 @@ export class Allocator {
         this.state = Allocator.validateFetchedState(this.state);
         core.debug(`Saving allocator state "${JSON.stringify(this.state)}"`);
 
-        await s3.putObject({
-            Bucket: input.awsMachinesBucket,
-            Key: awsUnityMachinesAllocationState,
-            Body: JSON.stringify(this.state),
-        });
+        await this.stateFetcher.saveAllocatorState(this.state);
     }
 
     private async loadAllocatorState(): Promise<IAllocatorState> {
-        let state = await this.fetchAllocatorState();
+        let state = await this.stateFetcher.fetchAllocatorState();
         this.state = Allocator.validateFetchedState(state);
 
         core.startGroup('Allocator State');
@@ -160,24 +132,6 @@ export class Allocator {
         }
 
         return state;
-    }
-
-    private async fetchAllocatorState(): Promise<IAllocatorState> {
-        const data = await s3.getObject({
-            Bucket: input.awsMachinesBucket,
-            Key: awsUnityMachinesAllocationState,
-        });
-
-        if (!data.Body)
-            throw new Error(`Failed to get state from s3 file "${awsUnityMachinesAllocationState}" at "${input.awsMachinesBucket}"`);
-
-        try {
-            const body = await data.Body.transformToString();
-            const state = JSON.parse(body);
-            return state;
-        } catch (error) {
-            throw new Error(`Failed to parse state from s3 file "${awsUnityMachinesAllocationState}" at "${input.awsMachinesBucket}"\n` + error);
-        }
     }
 
     private pushAllocation(allocation: IMachineAllocation): void {
