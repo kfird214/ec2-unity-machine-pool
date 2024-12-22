@@ -155,3 +155,6 @@ yarn-error.log*
 .local/
 
 src/**/*.js
+
+.config/*unity-machines.json
+.config/*unity-machines.state.json

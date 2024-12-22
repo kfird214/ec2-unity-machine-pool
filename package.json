@@ -15,12 +15,20 @@
   "homepage": "https://github.com/kfird214/ec2-unity-machine-pool#readme",
   "scripts": {
     "start": "",
+
     "build-watch": "tsc -w",
     "build": "tsc",
+
     "run": "node --env-file=.env src/main.js",
     "run-watch": "nodemon --delay 1 -w src/ --exec \"npm run run\" --verbose -e ts",
+
     "run-package": "node --env-file=.env dist/index.js",
-    "package": "ncc build src/main.ts -o dist --source-map --license licenses.txt"
+    "package": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
+
+    "get-state": "scripts\\get-machines-state.s3.bat && scripts\\get-machines-state.dynamo.bat && scripts\\get-machines-config.bat",
+
+    "clean-js": "git clean -dfx -e node_modules -e .config -e .env  *.js",
+    "clean-state": "node --env-file=.env scripts/clean-state.js"
   },
   "dependencies": {
     "@actions/core": "^1.10.1",
