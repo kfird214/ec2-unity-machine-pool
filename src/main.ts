@@ -38,11 +38,8 @@ async function run(input: GithubInput) {
         }
     }
 
-    let allocationId: string;
-    let machineAlloc: IMachineAllocation;
     if (input.allocateMachine) {
-        machineAlloc = await allocateMachine(allocator);
-        allocationId = machineAlloc.allocationId;
+        await allocateMachine(allocator);
     }
     else {
         assert(input.allocationId, 'AllocationId is required when allocateMachine is false');
@@ -52,13 +49,10 @@ async function run(input: GithubInput) {
             return;
         }
 
-        machineAlloc = machineAll;
-        allocationId = input.allocationId;
+        core.setOutput('allocation_id', machineAll.allocationId);
+        core.setOutput('instance_id', machineAll.instanceId);
+        core.setOutput('instance_name', machineAll.instanceName);
     }
-
-    core.setOutput('allocation_id', allocationId);
-    core.setOutput('instance_id', machineAlloc.instanceId);
-    core.setOutput('instance_name', machineAlloc.instanceName);
 }
 
 async function deallocateMachine(allocationId: string, allocator: IAllocator): Promise<IMachineAllocation | null> {
@@ -90,10 +84,14 @@ async function deallocateMachine(allocationId: string, allocator: IAllocator): P
 async function allocateMachine(allocator: IAllocator): Promise<IMachineAllocation> {
     core.info('Allocating a new machine');
 
-    const allocation = await allocator.allocate(); // todo dealocate on error?
+    const allocation = await allocator.allocate();
 
     if (!allocation)
         throw new Error('No machines available to allocate');
+
+    core.setOutput("allocation_id", allocation.allocationId);
+    core.setOutput('instance_id', allocation.instanceId);
+    core.setOutput('instance_name', allocation.instanceName);
 
     core.info(`Allocating machine "${JSON.stringify(allocation)}"`);
     const isRunning = await isMachineRunning(allocation.instanceId);
@@ -103,7 +101,13 @@ async function allocateMachine(allocator: IAllocator): Promise<IMachineAllocatio
     }
     else {
         core.notice(`Starting machine "${allocation.instanceId}"`);
-        await startMachine(allocation.instanceId);
+        try {
+            await startMachine(allocation.instanceId);
+        } catch (error) {
+            core.error(`Failed to start machine "${allocation.instanceId}". deallocating it`);
+            await deallocateMachine(allocation.allocationId, allocator);
+            console.error(error);
+        }
     }
 
     return allocation;

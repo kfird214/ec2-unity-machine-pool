@@ -22,8 +22,8 @@
     "run": "node --env-file=.env src/main.js",
     "run-watch": "nodemon --delay 1 -w src/ --exec \"npm run run\" --verbose -e ts",
 
-    "run-package": "node --env-file=.env dist/index.js",
     "package": "ncc build src/main.ts -o dist --source-map --license licenses.txt",
+    "run-package": "node --env-file=.env dist/index.js",
 
     "get-state": "scripts\\get-machines-state.s3.bat && scripts\\get-machines-state.dynamo.bat && scripts\\get-machines-config.bat",
 
